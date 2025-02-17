@@ -70,7 +70,7 @@ void ACircularGrid::GenerateGeometry()
     
     const int32 MaxSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(MaxRings) + SubdivisionFactor);
     const float BaseAngleStep = 360.0f / MaxSubdivisions;
-
+    
     for(int32 Ring = 0; Ring < MaxRings; Ring++)
     {
         const int32 CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring + 1) + SubdivisionFactor);
