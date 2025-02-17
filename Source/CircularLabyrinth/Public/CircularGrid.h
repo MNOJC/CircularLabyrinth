@@ -89,15 +89,20 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid Data")
 	TArray<FCell> Cells;
 
+	UFUNCTION(BlueprintCallable)
+	int32 GetCellIndex(int32 Ring, int32 Sector);
+
 private:
 
 	TMap<int32, int32> WallInstanceMap;
 	TMap<int32, int32> PillarInstanceMap;
+	TArray<UTextRenderComponent*> InstancedTextRenderComponents;
 
 	void GenerateGrid();
 	void GenerateGeometry();
 	void CalculateCellNeighbors(FCell& Cell);
-	int32 GetCellIndex(int32 Ring, int32 Sector);
+	void ClearVariables();
+	
 	FVector PolarToCartesian(float Radius, float Angle) const;
 	
 	FVector CalculateCellLocation(int32 Ring, int32 Sector) const;

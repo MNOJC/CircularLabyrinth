@@ -15,6 +15,7 @@ ACircularGrid::ACircularGrid()
 void ACircularGrid::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
+    ClearVariables();
     GenerateGrid();
     GenerateGeometry();
 }
@@ -24,6 +25,7 @@ void ACircularGrid::OnConstruction(const FTransform& Transform)
 void ACircularGrid::GenerateGrid()
 {
     Cells.Empty();
+    
     int32 CellIndex = 0;
 
     FCell CenterCell;
@@ -142,31 +144,60 @@ void ACircularGrid::CalculateCellNeighbors(FCell& Cell)
     const int32 Ring = Cell.Ring;
     const int32 Sector = Cell.Sector;
     
-    const int32 CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring + 1) + SubdivisionFactor);
+    // Voisins latéraux (même anneau)
+    int32 CurrentSubdivisions = 8 * FMath::Pow(2.0f, Ring - 1);
+    const int32 LeftSector = (Sector - 1 + CurrentSubdivisions) % CurrentSubdivisions;
+    const int32 RightSector = (Sector + 1) % CurrentSubdivisions;
+    
+    Cell.Neighbors.Add(GetCellIndex(Ring, LeftSector));
+    Cell.Neighbors.Add(GetCellIndex(Ring, RightSector));
 
-    // Voisins gauche/droite
-    Cell.Neighbors.Add(GetCellIndex(Ring, (Sector - 1 + CurrentSubdivisions) % CurrentSubdivisions));
-    Cell.Neighbors.Add(GetCellIndex(Ring, (Sector + 1) % CurrentSubdivisions));
-
-    // Voisin intérieur
-    if(Ring > 0)
+    // Voisin intérieur (centre ou anneau précédent)
+    if(Ring == 1)
     {
-        const int32 PrevSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
-        Cell.Neighbors.Add(GetCellIndex(Ring - 1, Sector / (CurrentSubdivisions / PrevSubdivisions)));
+        Cell.Neighbors.Add(0); // Connexion directe au centre
     }
-
-    // Voisins extérieurs
-    if(Ring < MaxRings - 1)
+    else if(Ring > 1)
     {
-        const int32 NextSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring + 2) + SubdivisionFactor);
-        const int32 ChildCount = NextSubdivisions / CurrentSubdivisions;
-        for(int32 i = 0; i < ChildCount; i++)
+        CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
+        
+        if (CurrentSubdivisions >  FMath::Pow(2.0f, FMath::FloorLog2(Ring - 1) + SubdivisionFactor))
         {
-            Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector * ChildCount + i));
+            Cell.Neighbors.Add(GetCellIndex(Ring - 1, floor(Sector / 2)));
+        }
+        else
+        {
+            Cell.Neighbors.Add(GetCellIndex(Ring - 1, Sector));
         }
     }
 
+    // Voisins extérieurs (anneau suivant)
+    if(Ring < MaxRings - 1)
+    {
+        CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
+        
+        if (CurrentSubdivisions <  FMath::Pow(2.0f, FMath::FloorLog2(Ring + 1) + SubdivisionFactor))
+        {
+            Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector * 2));
+            Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector * 2 + 1));
+        }
+        else
+        {
+            Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector));
+        }
+            
+    }
+
     
+}
+
+void ACircularGrid::ClearVariables()
+{
+    for (UTextRenderComponent* TextComponent : InstancedTextRenderComponents)
+    {
+        TextComponent->DestroyComponent();
+    }
+    InstancedTextRenderComponents.Empty();
 }
 
 int32 ACircularGrid::GetCellIndex(int32 Ring, int32 Sector)
@@ -220,6 +251,7 @@ void ACircularGrid::UpdateCellLocations()
 void ACircularGrid::AddDebugTextRenderer(FVector TextLoc, FString TextMessage)
 {
     UTextRenderComponent* TextRenderer = NewObject<UTextRenderComponent>(this);
+    InstancedTextRenderComponents.Add(TextRenderer);
     if (TextRenderer)
     {
         TextRenderer->RegisterComponent();
