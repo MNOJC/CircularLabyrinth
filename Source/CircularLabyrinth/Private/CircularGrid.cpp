@@ -33,6 +33,7 @@ void ACircularGrid::GenerateGrid()
     CenterCell.Ring = 0;
     CenterCell.Sector = 0;
     AddDebugTextRenderer(FVector::Zero(), FString::FromInt(CenterCell.Index));
+    
     Cells.Add(CenterCell);
     
     for(int32 Ring = 1; Ring < MaxRings; Ring++)
@@ -141,53 +142,63 @@ void ACircularGrid::GenerateGeometry()
 void ACircularGrid::CalculateCellNeighbors(FCell& Cell)
 {
     Cell.Neighbors.Empty();
-    const int32 Ring = Cell.Ring;
-    const int32 Sector = Cell.Sector;
-    
-    // Voisins latéraux (même anneau)
-    int32 CurrentSubdivisions = 8 * FMath::Pow(2.0f, Ring - 1);
-    const int32 LeftSector = (Sector - 1 + CurrentSubdivisions) % CurrentSubdivisions;
-    const int32 RightSector = (Sector + 1) % CurrentSubdivisions;
-    
-    Cell.Neighbors.Add(GetCellIndex(Ring, LeftSector));
-    Cell.Neighbors.Add(GetCellIndex(Ring, RightSector));
 
-    // Voisin intérieur (centre ou anneau précédent)
-    if(Ring == 1)
+    if (Cell.Index == 0 && Cell.Ring == 0 && Cell.Sector == 0)
     {
-        Cell.Neighbors.Add(0); // Connexion directe au centre
-    }
-    else if(Ring > 1)
-    {
-        CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
-        
-        if (CurrentSubdivisions >  FMath::Pow(2.0f, FMath::FloorLog2(Ring - 1) + SubdivisionFactor))
+        for (int i = 0; i < FMath::Pow(2.0f, FMath::FloorLog2(1) + SubdivisionFactor); i++)
         {
-            Cell.Neighbors.Add(GetCellIndex(Ring - 1, floor(Sector / 2)));
-        }
-        else
-        {
-            Cell.Neighbors.Add(GetCellIndex(Ring - 1, Sector));
+            Cell.Neighbors.Add(i + 1);
         }
     }
-
-    // Voisins extérieurs (anneau suivant)
-    if(Ring < MaxRings - 1)
+    else
     {
-        CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
+        const int32 Ring = Cell.Ring;
+        const int32 Sector = Cell.Sector;
+    
+        // Voisins latéraux (même anneau)
+        int32 CurrentSubdivisions = 8 * FMath::Pow(2.0f, Ring - 1);
+        const int32 LeftSector = (Sector - 1 + CurrentSubdivisions) % CurrentSubdivisions;
+        const int32 RightSector = (Sector + 1) % CurrentSubdivisions;
+    
+        Cell.Neighbors.Add(GetCellIndex(Ring, LeftSector));
+        Cell.Neighbors.Add(GetCellIndex(Ring, RightSector));
+
+        // Voisin intérieur (centre ou anneau précédent)
+        if(Ring == 1)
+        {
+            Cell.Neighbors.Add(0); // Connexion directe au centre
+        }
+        else if(Ring > 1)
+        {
+            CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
         
-        if (CurrentSubdivisions <  FMath::Pow(2.0f, FMath::FloorLog2(Ring + 1) + SubdivisionFactor))
-        {
-            Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector * 2));
-            Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector * 2 + 1));
+            if (CurrentSubdivisions >  FMath::Pow(2.0f, FMath::FloorLog2(Ring - 1) + SubdivisionFactor))
+            {
+                Cell.Neighbors.Add(GetCellIndex(Ring - 1, floor(Sector / 2)));
+            }
+            else
+            {
+                Cell.Neighbors.Add(GetCellIndex(Ring - 1, Sector));
+            }
         }
-        else
+
+        // Voisins extérieurs (anneau suivant)
+        if(Ring < MaxRings - 1)
         {
-            Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector));
-        }
+            CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
+        
+            if (CurrentSubdivisions <  FMath::Pow(2.0f, FMath::FloorLog2(Ring + 1) + SubdivisionFactor))
+            {
+                Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector * 2));
+                Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector * 2 + 1));
+            }
+            else
+            {
+                Cell.Neighbors.Add(GetCellIndex(Ring + 1, Sector));
+            }
             
+        }
     }
-
     
 }
 

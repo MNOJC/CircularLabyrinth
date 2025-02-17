@@ -39,17 +39,6 @@ struct FCell
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
 	TArray<int32> PillarInstances; // Index des instances HISM des piliers
 	
-	FCell()
-	{
-		Index = -1;
-		Ring = -1;
-		Sector = -1;
-		bCurrent = false;
-		bVisited = false;
-		WallInstances.Empty();
-		PillarInstances.Empty();
-		Neighbors.Empty();
-	}
 };
 
 UCLASS()
