@@ -1,15 +1,30 @@
 #include "CircularGrid.h"
+
+#include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "Math/UnrealMathUtility.h"
+#include "Runtime/Windows/D3D11RHI/Public/Windows/D3D11ThirdParty.h"
+
 
 ACircularGrid::ACircularGrid()
 {
     PrimaryActorTick.bCanEverTick = false;
 
     CircularWalls = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("CircularWalls"));
-    RadialWalls = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("RadialWalls"));
     Pillars = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("Pillars"));
+    Path = CreateDefaultSubobject<UHierarchicalInstancedStaticMeshComponent>(TEXT("Path"));
 
     RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
+}
+
+void ACircularGrid::BeginPlay()
+{
+    Super::BeginPlay();
+
+    SetLabyrinthEntrance(StartPath);
+    SetLabyrinthExit(EndPath);
+    StartRecursiveBacktracking();
+    
 }
 
 void ACircularGrid::OnConstruction(const FTransform& Transform)
@@ -28,10 +43,12 @@ void ACircularGrid::GenerateGrid()
     
     int32 CellIndex = 0;
 
-    FCell CenterCell;
+    FLabyrinthCell CenterCell;
     CenterCell.Index = CellIndex++;
     CenterCell.Ring = 0;
     CenterCell.Sector = 0;
+    CenterCell.bCurrent = false;
+    CenterCell.bVisited = false;
     AddDebugTextRenderer(FVector::Zero(), FString::FromInt(CenterCell.Index));
     
     Cells.Add(CenterCell);
@@ -42,7 +59,7 @@ void ACircularGrid::GenerateGrid()
 
         for(int32 Sector = 0; Sector < CurrentSubdivisions; Sector++)
         {
-            FCell NewCell;
+            FLabyrinthCell NewCell;
             NewCell.Index = CellIndex++;
             NewCell.Ring = Ring;
             NewCell.Sector = Sector;
@@ -53,7 +70,7 @@ void ACircularGrid::GenerateGrid()
         }
     }
 
-    for(FCell& Cell : Cells)
+    for(FLabyrinthCell& Cell : Cells)
     {
         CalculateCellNeighbors(Cell);
     }
@@ -62,11 +79,7 @@ void ACircularGrid::GenerateGrid()
 void ACircularGrid::GenerateGeometry()
 {
     CircularWalls->ClearInstances();
-    RadialWalls->ClearInstances();
     Pillars->ClearInstances();
-
-    WallInstanceMap.Empty();
-    PillarInstanceMap.Empty();
     
     const int32 MaxSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(MaxRings) + SubdivisionFactor);
     const float BaseAngleStep = 360.0f / MaxSubdivisions;
@@ -93,16 +106,9 @@ void ACircularGrid::GenerateGeometry()
             
             FTransform Transform(Rotation, LocationCircularWall + this->GetActorLocation());
             Transform.SetScale3D(FVector(Scale * 2.0f, 1.0f, 1.0f));
-            const int32 WallInstanceIndex = CircularWalls->AddInstance(Transform);
-            
-            const int32 CellIndex = GetCellIndex(Ring, Sector);
-            Cells[CellIndex].WallInstances.Add(WallInstanceIndex);
-            WallInstanceMap.Add(WallInstanceIndex, CellIndex);
+            CircularWalls->AddInstance(Transform);
+            Pillars->AddInstance(FTransform(FRotator(0.0f, PillarAngle, 0.0f), LocationPillar, FVector(0.2f, 0.2f, 1.2f)));
 
-            // Placement des piliers principaux
-            const int32 PillarInstanceIndex = Pillars->AddInstance(FTransform(FRotator(0.0f, PillarAngle, 0.0f), LocationPillar, FVector(1.0f, 1.0f, 1.2f)));
-            Cells[CellIndex].PillarInstances.Add(PillarInstanceIndex);
-            PillarInstanceMap.Add(PillarInstanceIndex, CellIndex);
         }
 
         // Génération des murs radiaux entre les anneaux
@@ -123,23 +129,20 @@ void ACircularGrid::GenerateGeometry()
                 // Configuration du mur radial
                 const FVector Direction = (EndOuter - StartInner).GetSafeNormal();
                 const float WallLength = (EndOuter - StartInner).Size();
-                const FVector RadialMeshSize = RadialWalls->GetStaticMesh()->GetBoundingBox().GetSize();
+                const FVector RadialMeshSize = CircularWalls->GetStaticMesh()->GetBoundingBox().GetSize();
                 
                 FTransform RadialTransform;
                 RadialTransform.SetLocation((StartInner + EndOuter) * 0.5f + this->GetActorLocation());
                 RadialTransform.SetRotation(Direction.Rotation().Quaternion());
                 RadialTransform.SetScale3D(FVector(WallLength / RadialMeshSize.Y, 1.0f, 1.0f));
                 
-                const int32 RadialInstanceIndex = RadialWalls->AddInstance(RadialTransform);
-                const int32 CellIndex = GetCellIndex(Ring, Sector);
-                Cells[CellIndex].WallInstances.Add(RadialInstanceIndex);
-                WallInstanceMap.Add(RadialInstanceIndex, CellIndex);
+                CircularWalls->AddInstance(RadialTransform);
             }
         }
     }
 }
 
-void ACircularGrid::CalculateCellNeighbors(FCell& Cell)
+void ACircularGrid::CalculateCellNeighbors(FLabyrinthCell& Cell)
 {
     Cell.Neighbors.Empty();
 
@@ -156,7 +159,7 @@ void ACircularGrid::CalculateCellNeighbors(FCell& Cell)
         const int32 Sector = Cell.Sector;
     
         // Voisins latéraux (même anneau)
-        int32 CurrentSubdivisions = 8 * FMath::Pow(2.0f, Ring - 1);
+        int32 CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
         const int32 LeftSector = (Sector - 1 + CurrentSubdivisions) % CurrentSubdivisions;
         const int32 RightSector = (Sector + 1) % CurrentSubdivisions;
     
@@ -211,6 +214,19 @@ void ACircularGrid::ClearVariables()
     InstancedTextRenderComponents.Empty();
 }
 
+int32 ACircularGrid::GetCurrentCell()
+{
+    for (FLabyrinthCell Cell : Cells)
+    {
+        if (Cell.bCurrent)
+        {
+            return Cell.Index;
+        }
+    }
+
+    return 0;
+}
+
 int32 ACircularGrid::GetCellIndex(int32 Ring, int32 Sector)
 {
     if(Ring == 0) return 0;
@@ -225,6 +241,16 @@ int32 ACircularGrid::GetCellIndex(int32 Ring, int32 Sector)
     
     const int32 CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
     return Index + (Sector % CurrentSubdivisions);
+}
+
+void ACircularGrid::TestCellNeighbors(int32 index)
+{
+    for(int32 Neighbors : Cells[index].Neighbors)
+    {
+        FString DebugMessage = FString::Printf(TEXT("Selected Neighbor Index: %d"), Neighbors);
+        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, DebugMessage);
+    }
+    
 }
 
 FVector ACircularGrid::PolarToCartesian(float Radius, float Angle) const
@@ -253,7 +279,7 @@ FVector ACircularGrid::CalculateCellLocation(int32 Ring, int32 Sector) const
 
 void ACircularGrid::UpdateCellLocations()
 {
-    for(FCell& Cell : Cells)
+    for(FLabyrinthCell& Cell : Cells)
     {
         Cell.Location = CalculateCellLocation(Cell.Ring, Cell.Sector);
     }
@@ -263,7 +289,7 @@ void ACircularGrid::AddDebugTextRenderer(FVector TextLoc, FString TextMessage)
 {
     UTextRenderComponent* TextRenderer = NewObject<UTextRenderComponent>(this);
     InstancedTextRenderComponents.Add(TextRenderer);
-    if (TextRenderer)
+    if (TextRenderer && DebugIndex)
     {
         TextRenderer->RegisterComponent();
         TextRenderer->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
@@ -278,4 +304,264 @@ void ACircularGrid::AddDebugTextRenderer(FVector TextLoc, FString TextMessage)
         TextRenderer->SetVerticalAlignment(EVRTA_TextCenter);
         TextRenderer->SetWorldSize(100.0f);
     }
+}
+
+void ACircularGrid::SetLabyrinthEntrance(ELabyrinthStart ELabyrinthEntrance)
+{
+    int32 PerimeterCellChosen;
+    FLabyrinthCell& FirstCell = Cells[0];
+    
+    switch (ELabyrinthEntrance)
+    {
+    case ELabyrinthStart::Center:
+        
+        FirstCell.bCurrent = true;
+        FirstCell.bVisited = true;
+        
+        break;
+
+    case ELabyrinthStart::Perimeter:
+
+        PerimeterCellChosen = GetRandomPerimeterCell();
+        FLabyrinthCell& RandomCell = Cells[PerimeterCellChosen];
+        
+        RandomCell.bCurrent = true;
+        RandomCell.bVisited = true;
+
+        OpenPerimeterCell(Cells[PerimeterCellChosen]);
+        
+        break;
+        
+    }
+}
+
+void ACircularGrid::SetLabyrinthExit(ELabyrinthExit ELabyrinthExit)
+{
+    FLabyrinthCell& EndCell = Cells[0];
+    
+    switch (ELabyrinthExit)
+    {
+    case ELabyrinthExit::Center:
+
+        EndCell.bCurrent = false;
+        EndCell.bVisited = true;
+        
+        break;
+    }
+}
+
+int32 ACircularGrid::GetRandomPerimeterCell()
+{
+    TArray<int32> PossibleIndex;
+    
+    for (FLabyrinthCell& Cell : Cells)
+    {
+        if (Cell.Ring == MaxRings - 1)
+        {
+            PossibleIndex.Add(Cell.Index);
+        }
+    }
+
+    
+    return PossibleIndex[UKismetMathLibrary::RandomIntegerInRange(0, FMath::Clamp(PossibleIndex.Num() - 1, 0, PossibleIndex.Num() - 1))];
+}
+
+void ACircularGrid::RemoveWall(FLabyrinthCell Cell1, FLabyrinthCell Cell2)
+{
+    FHitResult HitResult;
+    TArray<AActor*> ActorsToIgnore;
+    
+    UKismetSystemLibrary::LineTraceSingle(
+        GetWorld(),
+        Cell1.Location + this->GetActorLocation(),
+        Cell2.Location + this->GetActorLocation(),
+        UEngineTypes::ConvertToTraceType(ECC_Visibility),
+        false,
+        ActorsToIgnore,
+        EDrawDebugTrace::Persistent,
+        HitResult,
+        true
+    );
+
+    CircularWalls->RemoveInstance(HitResult.Item);
+}
+
+void ACircularGrid::OpenPerimeterCell(FLabyrinthCell Cell)
+{
+    FHitResult HitResult;
+    TArray<AActor*> ActorsToIgnore;
+    
+    UKismetSystemLibrary::LineTraceSingle(
+        GetWorld(),
+        Cell.Location + this->GetActorLocation(),
+        (((Cell.Location + this->GetActorLocation()) - this->GetActorLocation()).GetSafeNormal()) *  RingSpacing + Cell.Location + this->GetActorLocation(),
+        UEngineTypes::ConvertToTraceType(ECC_Visibility),
+        false,
+        ActorsToIgnore,
+        EDrawDebugTrace::None,
+        HitResult,
+        true
+        );
+
+    CircularWalls->RemoveInstance(HitResult.Item);
+}
+
+void ACircularGrid::UpdatePathLocalisation(FLabyrinthCell Cell)
+{
+    Path->ClearInstances();
+    
+    FTransform MakeTransform;
+    MakeTransform.SetLocation(Cell.Location + this->GetActorLocation());
+    MakeTransform.SetRotation(FQuat(FRotator::ZeroRotator));
+    MakeTransform.SetScale3D(FVector(1, 1, 1));
+    
+    Path->AddInstance(MakeTransform, true);
+}
+
+void ACircularGrid::StartRecursiveBacktracking()
+{
+    if (AnimationDelay <= 0)
+    {
+        AnimationDelay = 0.001;
+    }
+    GetWorld()->GetTimerManager().SetTimer(TimerHandleBacktracking, this, &ACircularGrid::RecursiveBacktrackingStep, AnimationDelay, true);
+}
+
+void ACircularGrid::RecursiveBacktrackingStep()
+{
+    if (RecursiveBacktrackingFinished)
+    {
+        GetWorld()->GetTimerManager().ClearTimer(TimerHandleBacktracking);
+
+        switch (EndPath)
+        {
+        case ELabyrinthExit::Center:
+            OpenCenterCell(LongestPathCell);
+            break;
+
+        case ELabyrinthExit::Farest:
+            OpenPerimeterCell(LongestPathCell);
+            break;
+
+        case ELabyrinthExit::RandomPerimeter:
+            OpenPerimeterCell(Cells[GetRandomPerimeterCell()]);
+            break;
+            
+        }
+    }
+
+    CurrentPathCell = Cells[GetCurrentCell()];
+    
+    ProgressPath();
+   
+    
+}
+
+void ACircularGrid::ProgressPath()
+{
+    FLabyrinthCell ChosenNeighbor;
+    if (GetPotentialNextNeighbor(CurrentPathCell, ChosenNeighbor))
+    {
+        NextPathCell = ChosenNeighbor;
+        UpdatePathLocalisation(NextPathCell);
+        RemoveWall(CurrentPathCell, NextPathCell);
+        UpdateCurrentVisitedState(CurrentPathCell.Index, false, true);
+        UpdateCurrentVisitedState(NextPathCell.Index, true, true);
+        PathStackCells.Add(Cells[CurrentPathCell.Index]);
+
+        switch (EndPath)
+        {
+        case ELabyrinthExit::Center:
+            FoundLongestPathAtRing(1);
+            break;
+
+        case ELabyrinthExit::Farest:
+            FoundLongestPathAtRing(MaxRings - 1);
+            break;
+
+        case ELabyrinthExit::RandomPerimeter:
+            break;
+        }
+        
+    }
+    else
+    {
+        UpdateCurrentVisitedState(CurrentPathCell.Index, false, true);
+        UpdatePathLocalisation(CurrentPathCell);
+        if (!PathStackCells.IsEmpty())
+        {
+            CurrentPathCell = PathStackCells[PathStackCells.Num() - 1];
+            UpdateCurrentVisitedState(CurrentPathCell.Index, true, true);
+            UpdateCurrentVisitedState(NextPathCell.Index, false, true);
+            PathStackCells.RemoveAt(PathStackCells.Num() - 1);
+            ProgressPath();
+        }
+        else
+        {
+            RecursiveBacktrackingFinished = true;
+        }
+    }
+}
+
+bool ACircularGrid::GetPotentialNextNeighbor(FLabyrinthCell Cell, FLabyrinthCell& ChosenNeighbors)
+{
+    TArray<FLabyrinthCell> PotentialNeighbors;
+    TArray<int32> NeighborIndices;
+     
+    for (int32 Index : Cells[Cell.Index].Neighbors)
+    {
+        if (!Cells[Index].bVisited)
+        {
+            PotentialNeighbors.Add(Cells[Index]);
+            NeighborIndices.Add(Index);
+        }
+    }
+    
+   if (PotentialNeighbors.IsEmpty())
+    {
+        return false;
+    }
+    
+    int32 rndIndex = UKismetMathLibrary::RandomIntegerInRange(0, FMath::Clamp(PotentialNeighbors.Num() - 1, 0, PotentialNeighbors.Num() - 1));
+    ChosenNeighbors = PotentialNeighbors[rndIndex];
+    
+    return !PotentialNeighbors.IsEmpty();
+    
+}
+
+void ACircularGrid::UpdateCurrentVisitedState(int32 CellIndex, bool Current, bool Visited)
+{
+    FLabyrinthCell& UpdatedCell = Cells[CellIndex];
+    UpdatedCell.bCurrent = Current;
+    UpdatedCell.bVisited = Visited;
+}
+
+void ACircularGrid::FoundLongestPathAtRing(int32 Ring)
+{
+    
+    if (PathStackCells.Num() - 1  > LongestPath && Ring == NextPathCell.Ring)
+    {
+        LongestPath = PathStackCells.Num() - 1;
+        LongestPathCell = Cells[NextPathCell.Index];
+    }
+}
+
+void ACircularGrid::OpenCenterCell(FLabyrinthCell Cell)
+{
+    FHitResult HitResult;
+    TArray<AActor*> ActorsToIgnore;
+    
+    UKismetSystemLibrary::LineTraceSingle(
+        GetWorld(),
+        Cell.Location + this->GetActorLocation(),
+        (((this->GetActorLocation() - (Cell.Location + this->GetActorLocation())).GetSafeNormal()) *  RingSpacing) + Cell.Location + this->GetActorLocation(),
+        UEngineTypes::ConvertToTraceType(ECC_Visibility),
+        false,
+        ActorsToIgnore,
+        EDrawDebugTrace::None,
+        HitResult,
+        true
+        );
+
+    CircularWalls->RemoveInstance(HitResult.Item);
 }

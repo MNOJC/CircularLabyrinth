@@ -1,45 +1,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ELabyrinthExit.h"
+#include "ELabyrinthStart.h"
+#include "SLabyrinthCell.h"
+#include "Kismet/KismetArrayLibrary.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "GameFramework/Actor.h"
 #include "Components/HierarchicalInstancedStaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "CircularGrid.generated.h"
-
-
-USTRUCT(BlueprintType)
-struct FCell
-{
-	GENERATED_BODY()
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
-	int32 Index;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
-	int32 Ring;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
-	int32 Sector;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
-	FVector Location;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
-	TArray<int32> Neighbors;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
-	bool bCurrent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
-	bool bVisited;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
-	TArray<int32> WallInstances; // Index des instances HISM des murs
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Cell Data")
-	TArray<int32> PillarInstances; // Index des instances HISM des piliers
-	
-};
 
 UCLASS()
 class CIRCULARLABYRINTH_API ACircularGrid : public AActor
@@ -48,6 +18,8 @@ class CIRCULARLABYRINTH_API ACircularGrid : public AActor
 
 public:
 	ACircularGrid();
+
+	virtual void BeginPlay() override;
 
 	UPROPERTY(EditAnywhere, Category = "Grid Settings")
 	int32 MaxRings = 3;
@@ -64,33 +36,63 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Grid Settings")
 	float MeshLength;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	UPROPERTY(EditAnywhere, Category = "Grid Settings")
+	FRandomStream Seed;
+
+	UPROPERTY(EditAnywhere, Category = "Grid Settings")
+	ELabyrinthStart StartPath;
+	
+	UPROPERTY(EditAnywhere, Category = "Grid Settings")
+	ELabyrinthExit EndPath;
+
+	UPROPERTY(EditAnywhere, Category = "Grid Settings")
+	float AnimationDelay = 0.0f;
+	
+	UPROPERTY(EditAnywhere, Category = "Grid Settings")
+	bool DebugIndex;
+
+	UPROPERTY(EditDefaultsOnly)
 	UHierarchicalInstancedStaticMeshComponent* CircularWalls;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	UHierarchicalInstancedStaticMeshComponent* RadialWalls;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	UPROPERTY(EditDefaultsOnly)
 	UHierarchicalInstancedStaticMeshComponent* Pillars;
+
+	UPROPERTY(EditDefaultsOnly)
+	UHierarchicalInstancedStaticMeshComponent* Path;
 	
 	virtual void OnConstruction(const FTransform& Transform) override;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Grid Data")
-	TArray<FCell> Cells;
+	UPROPERTY(BlueprintReadWrite, Category = "Grid Data")
+	TArray<FLabyrinthCell> Cells;
 
 	UFUNCTION(BlueprintCallable)
 	int32 GetCellIndex(int32 Ring, int32 Sector);
 
-private:
+	UFUNCTION(BlueprintCallable)
+	void TestCellNeighbors(int32 index);
 
-	TMap<int32, int32> WallInstanceMap;
-	TMap<int32, int32> PillarInstanceMap;
+
+
+private:
+	
 	TArray<UTextRenderComponent*> InstancedTextRenderComponents;
+	FTimerHandle TimerHandleBacktracking;
+
+	FLabyrinthCell CurrentPathCell;
+	FLabyrinthCell NextPathCell;
+
+	TArray<FLabyrinthCell> PathStackCells;
+
+	int32 LongestPath;
+	FLabyrinthCell LongestPathCell;
 
 	void GenerateGrid();
 	void GenerateGeometry();
-	void CalculateCellNeighbors(FCell& Cell);
+	void CalculateCellNeighbors(FLabyrinthCell& Cell);
 	void ClearVariables();
+	int32 GetCurrentCell();
+
+	bool RecursiveBacktrackingFinished = false;
 	
 	FVector PolarToCartesian(float Radius, float Angle) const;
 	
@@ -98,4 +100,24 @@ private:
 	void UpdateCellLocations();
 
 	void AddDebugTextRenderer(FVector TextLoc, FString TextMessage);
+
+	void SetLabyrinthEntrance(ELabyrinthStart ELabyrinthEntrance);
+	void SetLabyrinthExit(ELabyrinthExit ELabyrinthExit);
+	
+	int32 GetRandomPerimeterCell();
+	void RemoveWall(FLabyrinthCell Cell1, FLabyrinthCell Cell2);
+	bool GetPotentialNextNeighbor(FLabyrinthCell Cell, FLabyrinthCell& ChosenNeighbors);
+	void OpenPerimeterCell(FLabyrinthCell Cell);
+	void UpdatePathLocalisation(FLabyrinthCell Cell);
+	void UpdateCurrentVisitedState(int32 CellIndex, bool Current, bool Visited);
+
+	void FoundLongestPathAtRing(int32 Ring);
+	void OpenCenterCell(FLabyrinthCell Cell);
+
+	void StartRecursiveBacktracking();
+	void RecursiveBacktrackingStep();
+
+	void ProgressPath();
 };
+
+
