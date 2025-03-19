@@ -30,49 +30,55 @@ void ACircularGrid::BeginPlay()
 void ACircularGrid::OnConstruction(const FTransform& Transform)
 {
     Super::OnConstruction(Transform);
-    ClearVariables();
-    GenerateGrid();
-    GenerateGeometry();
+    ClearVariables(); // Clear Instanced text component
+    GenerateGrid(); // generate grid only init cells
+    GenerateGeometry(); // generate walls & pillars
 }
 
 
 
 void ACircularGrid::GenerateGrid()
 {
-    Cells.Empty();
+    Cells.Empty(); // clear cells
     
     int32 CellIndex = 0;
 
-    FLabyrinthCell CenterCell;
-    CenterCell.Index = CellIndex++;
-    CenterCell.Ring = 0;
+    // Create and store center cell
+    FLabyrinthCell CenterCell;                     
+    CenterCell.Index = CellIndex++; // Increment to next index cell
+    CenterCell.Ring = 0;                            
     CenterCell.Sector = 0;
     CenterCell.bCurrent = false;
     CenterCell.bVisited = false;
-    AddDebugTextRenderer(FVector::Zero(), FString::FromInt(CenterCell.Index));
-    
     Cells.Add(CenterCell);
     
+    AddDebugTextRenderer(FVector::Zero(), FString::FromInt(CenterCell.Index)); // add debug index cell text component
+    
+    
+
+    // Setup grid cells with index, sector, ring & cell location
     for(int32 Ring = 1; Ring < MaxRings; Ring++)
     {
-        const int32 CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
+        const int32 CurrentSubdivisions = GetRingSubdivision(Ring); // store current ring subdivision
 
         for(int32 Sector = 0; Sector < CurrentSubdivisions; Sector++)
         {
             FLabyrinthCell NewCell;
-            NewCell.Index = CellIndex++;
-            NewCell.Ring = Ring;
-            NewCell.Sector = Sector;
-            NewCell.Location = CalculateCellLocation(NewCell.Ring, NewCell.Sector);
-            AddDebugTextRenderer(NewCell.Location,  FString::FromInt(NewCell.Index));
+            NewCell.Index = CellIndex++; // cell index
+            NewCell.Ring = Ring; // cell current ring 
+            NewCell.Sector = Sector; // cell current sector
             
-            Cells.Add(NewCell);
+            NewCell.Location = CalculateCellLocation(NewCell.Ring, NewCell.Sector); // cell location
+            
+            AddDebugTextRenderer(NewCell.Location,  FString::FromInt(NewCell.Index)); // add debug index cell text component
+            
+            Cells.Add(NewCell); // add the new cell 
         }
     }
 
     for(FLabyrinthCell& Cell : Cells)
     {
-        CalculateCellNeighbors(Cell);
+        CalculateCellNeighbors(Cell); // setup cells neighbors
     }
 }
 
@@ -225,6 +231,11 @@ int32 ACircularGrid::GetCurrentCell()
     }
 
     return 0;
+}
+
+int32 ACircularGrid::GetRingSubdivision(int32 Ring)
+{
+    return FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
 }
 
 int32 ACircularGrid::GetCellIndex(int32 Ring, int32 Sector)

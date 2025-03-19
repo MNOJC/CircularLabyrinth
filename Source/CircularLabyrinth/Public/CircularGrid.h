@@ -91,6 +91,7 @@ private:
 	void CalculateCellNeighbors(FLabyrinthCell& Cell);
 	void ClearVariables();
 	int32 GetCurrentCell();
+	int32 GetRingSubdivision(int32 Ring);
 
 	bool RecursiveBacktrackingFinished = false;
 	
@@ -116,6 +117,7 @@ private:
 
 	void StartRecursiveBacktracking();
 	void RecursiveBacktrackingStep();
+	
 
 	void ProgressPath();
 };
