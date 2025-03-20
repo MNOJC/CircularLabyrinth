@@ -379,7 +379,7 @@ int32 ACircularGrid::GetRandomPerimeterCell()
     }
 
     
-    return PossibleIndex[UKismetMathLibrary::RandomIntegerInRange(0, FMath::Clamp(PossibleIndex.Num() - 1, 0, PossibleIndex.Num() - 1))];
+    return PossibleIndex[Seed.RandRange(0, FMath::Clamp(PossibleIndex.Num() - 1, 0, PossibleIndex.Num() - 1))];
 }
 
 void ACircularGrid::RemoveWall(FLabyrinthCell Cell1, FLabyrinthCell Cell2)
@@ -396,7 +396,7 @@ void ACircularGrid::RemoveWall(FLabyrinthCell Cell1, FLabyrinthCell Cell2)
         UEngineTypes::ConvertToTraceType(ECC_Visibility), 
         false,
         ActorsToIgnore,
-        EDrawDebugTrace::Persistent,
+        EDrawDebugTrace::None,
         HitResult,
         true
     );
@@ -551,7 +551,7 @@ bool ACircularGrid::GetPotentialNextNeighbor(FLabyrinthCell Cell, FLabyrinthCell
         return false;
     }
     
-    int32 rndIndex = UKismetMathLibrary::RandomIntegerInRange(0, FMath::Clamp(PotentialNeighbors.Num() - 1, 0, PotentialNeighbors.Num() - 1));
+    int32 rndIndex = Seed.RandRange(0, FMath::Clamp(PotentialNeighbors.Num() - 1, 0, PotentialNeighbors.Num() - 1));
     ChosenNeighbors = PotentialNeighbors[rndIndex];
     
     return !PotentialNeighbors.IsEmpty();
