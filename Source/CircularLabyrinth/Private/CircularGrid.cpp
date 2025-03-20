@@ -21,9 +21,9 @@ void ACircularGrid::BeginPlay()
 {
     Super::BeginPlay();
 
-    SetLabyrinthEntrance(StartPath);
-    SetLabyrinthExit(EndPath);
-    StartRecursiveBacktracking();
+    SetLabyrinthEntrance(StartPath); // setup start cell algo
+    SetLabyrinthExit(EndPath); // setup end cell algo
+    StartRecursiveBacktracking(); // start algo
     
 }
 
@@ -84,20 +84,21 @@ void ACircularGrid::GenerateGrid()
 
 void ACircularGrid::GenerateGeometry()
 {
+    //Remove pillar, radial walls & circular walls instances
     CircularWalls->ClearInstances();
     Pillars->ClearInstances();
     
-    const int32 MaxSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(MaxRings) + SubdivisionFactor);
-    const float BaseAngleStep = 360.0f / MaxSubdivisions;
+    const int32 MaxSubdivisions = GetRingSubdivision(MaxRings); // Store max subdivision of labyrinth
+    const float BaseAngleStep = 360.0f / MaxSubdivisions; // Angle steps in degrees
     
-    for(int32 Ring = 0; Ring < MaxRings; Ring++)
+    for(int32 Ring = 0; Ring < MaxRings; Ring++) // Loop the number of time there are rings
     {
         const int32 CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring + 1) + SubdivisionFactor);
         const int32 SubdivisionRatio = MaxSubdivisions / CurrentSubdivisions;
         const float Radius = BaseRadius + Ring * RingSpacing;
         const float EffectiveAngleStep = 360.0f / CurrentSubdivisions;
 
-        // Génération des murs circulaires
+        // Generate Circular walls & pillars
         for(int32 Sector = 0; Sector < CurrentSubdivisions; Sector++)
         {
             float CircularWallAngle = ((Sector + 0.5f) * SubdivisionRatio * BaseAngleStep);
@@ -117,22 +118,22 @@ void ACircularGrid::GenerateGeometry()
 
         }
 
-        // Génération des murs radiaux entre les anneaux
+        // Generate radial walls
         if(Ring < MaxRings - 1)
         {
             const float NextRadius = Radius + RingSpacing;
 
             for(int32 Sector = 0; Sector < CurrentSubdivisions; Sector++)
             {
-                // Calcul des angles avec décalage de demi-step si nécessaire
+                
                 const float CurrentAngle = Sector * SubdivisionRatio * BaseAngleStep;
                 const float NextAngle = CurrentAngle;
 
-                // Points de départ et d'arrivée
+                
                 const FVector StartInner = PolarToCartesian(Radius, CurrentAngle);
                 const FVector EndOuter = PolarToCartesian(NextRadius, NextAngle);
 
-                // Configuration du mur radial
+                
                 const FVector Direction = (EndOuter - StartInner).GetSafeNormal();
                 const float WallLength = (EndOuter - StartInner).Size();
                 const FVector RadialMeshSize = CircularWalls->GetStaticMesh()->GetBoundingBox().GetSize();
@@ -150,13 +151,13 @@ void ACircularGrid::GenerateGeometry()
 
 void ACircularGrid::CalculateCellNeighbors(FLabyrinthCell& Cell)
 {
-    Cell.Neighbors.Empty();
+    Cell.Neighbors.Empty(); // Clear cell neighbors
 
-    if (Cell.Index == 0 && Cell.Ring == 0 && Cell.Sector == 0)
+    if (Cell.Index == 0 && Cell.Ring == 0 && Cell.Sector == 0) // Check if is center cell
     {
         for (int i = 0; i < FMath::Pow(2.0f, FMath::FloorLog2(1) + SubdivisionFactor); i++)
         {
-            Cell.Neighbors.Add(i + 1);
+            Cell.Neighbors.Add(i + 1);  // Setup center cell neighbors
         }
     }
     else
@@ -164,7 +165,7 @@ void ACircularGrid::CalculateCellNeighbors(FLabyrinthCell& Cell)
         const int32 Ring = Cell.Ring;
         const int32 Sector = Cell.Sector;
     
-        // Voisins latéraux (même anneau)
+        // Setup right & left cell neighbors
         int32 CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
         const int32 LeftSector = (Sector - 1 + CurrentSubdivisions) % CurrentSubdivisions;
         const int32 RightSector = (Sector + 1) % CurrentSubdivisions;
@@ -172,10 +173,10 @@ void ACircularGrid::CalculateCellNeighbors(FLabyrinthCell& Cell)
         Cell.Neighbors.Add(GetCellIndex(Ring, LeftSector));
         Cell.Neighbors.Add(GetCellIndex(Ring, RightSector));
 
-        // Voisin intérieur (centre ou anneau précédent)
+        // Setup cell parent neighbors
         if(Ring == 1)
         {
-            Cell.Neighbors.Add(0); // Connexion directe au centre
+            Cell.Neighbors.Add(0); 
         }
         else if(Ring > 1)
         {
@@ -191,7 +192,7 @@ void ACircularGrid::CalculateCellNeighbors(FLabyrinthCell& Cell)
             }
         }
 
-        // Voisins extérieurs (anneau suivant)
+        // Setup cell children neighbors
         if(Ring < MaxRings - 1)
         {
             CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
@@ -215,7 +216,7 @@ void ACircularGrid::ClearVariables()
 {
     for (UTextRenderComponent* TextComponent : InstancedTextRenderComponents)
     {
-        TextComponent->DestroyComponent();
+        TextComponent->DestroyComponent(); // Clear Instanced text component
     }
     InstancedTextRenderComponents.Empty();
 }
@@ -226,7 +227,7 @@ int32 ACircularGrid::GetCurrentCell()
     {
         if (Cell.bCurrent)
         {
-            return Cell.Index;
+            return Cell.Index; // loop through all cells and return the current one
         }
     }
 
@@ -235,14 +236,14 @@ int32 ACircularGrid::GetCurrentCell()
 
 int32 ACircularGrid::GetRingSubdivision(int32 Ring)
 {
-    return FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
+    return FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor); // formula to get subdivision at a ring && with a subdivision factor
 }
 
 int32 ACircularGrid::GetCellIndex(int32 Ring, int32 Sector)
 {
-    if(Ring == 0) return 0;
+    if(Ring == 0) return 0; // center cell
 
-    int32 Index = 1; // Commence après la cellule centrale
+    int32 Index = 1; 
     
     for(int32 r = 1; r < Ring; r++)
     {
@@ -251,7 +252,7 @@ int32 ACircularGrid::GetCellIndex(int32 Ring, int32 Sector)
     }
     
     const int32 CurrentSubdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
-    return Index + (Sector % CurrentSubdivisions);
+    return Index + (Sector % CurrentSubdivisions); // Return the cell index at a ring & sector given
 }
 
 void ACircularGrid::TestCellNeighbors(int32 index)
@@ -259,14 +260,14 @@ void ACircularGrid::TestCellNeighbors(int32 index)
     for(int32 Neighbors : Cells[index].Neighbors)
     {
         FString DebugMessage = FString::Printf(TEXT("Selected Neighbor Index: %d"), Neighbors);
-        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, DebugMessage);
+        GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Green, DebugMessage); // debug funct to check neighbors index of a cell
     }
     
 }
 
 FVector ACircularGrid::PolarToCartesian(float Radius, float Angle) const
 {
-    const float Radians = FMath::DegreesToRadians(Angle);
+    const float Radians = FMath::DegreesToRadians(Angle); // give location point perimeter with a specific radius and angle 
     return FVector(
         Radius * FMath::Cos(Radians),
         Radius * FMath::Sin(Radians),
@@ -276,9 +277,9 @@ FVector ACircularGrid::PolarToCartesian(float Radius, float Angle) const
 
 FVector ACircularGrid::CalculateCellLocation(int32 Ring, int32 Sector) const
 {
-    if(Ring == 0) return FVector::ZeroVector;
+    if(Ring == 0) return FVector::ZeroVector; // center cell
 
-    // Ajustement du calcul du rayon pour les anneaux extérieurs
+    // do the same logic same as grid point but with offset (*0.5) to get the center of the cell
     const float MiddleRadius = BaseRadius + ((Ring - 1) * RingSpacing) + (RingSpacing * 0.5f);
     
     const int32 Subdivisions = FMath::Pow(2.0f, FMath::FloorLog2(Ring) + SubdivisionFactor);
@@ -292,24 +293,24 @@ void ACircularGrid::UpdateCellLocations()
 {
     for(FLabyrinthCell& Cell : Cells)
     {
-        Cell.Location = CalculateCellLocation(Cell.Ring, Cell.Sector);
+        Cell.Location = CalculateCellLocation(Cell.Ring, Cell.Sector); // set cell location at all cells
     }
 }
 
 void ACircularGrid::AddDebugTextRenderer(FVector TextLoc, FString TextMessage)
 {
     UTextRenderComponent* TextRenderer = NewObject<UTextRenderComponent>(this);
-    InstancedTextRenderComponents.Add(TextRenderer);
+    InstancedTextRenderComponents.Add(TextRenderer); // create new text component
     if (TextRenderer && DebugIndex)
     {
         TextRenderer->RegisterComponent();
         TextRenderer->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepRelativeTransform);
         
-        // Positionner le texte dans le monde
+        // set text location
         TextRenderer->SetWorldLocation(TextLoc + this->GetActorLocation());
         TextRenderer->SetWorldRotation(FRotator(90.0f, 0.0f, 180.0f));
         
-        // Définir le texte
+        // Define text
         TextRenderer->SetText(FText::FromString(TextMessage));
         TextRenderer->SetHorizontalAlignment(EHTA_Center);
         TextRenderer->SetVerticalAlignment(EVRTA_TextCenter);
@@ -324,13 +325,15 @@ void ACircularGrid::SetLabyrinthEntrance(ELabyrinthStart ELabyrinthEntrance)
     
     switch (ELabyrinthEntrance)
     {
+        // Set center cell current & visited 
     case ELabyrinthStart::Center:
         
         FirstCell.bCurrent = true;
         FirstCell.bVisited = true;
         
         break;
-
+        
+        // Set a random perimeter cell current & visited
     case ELabyrinthStart::Perimeter:
 
         PerimeterCellChosen = GetRandomPerimeterCell();
@@ -349,7 +352,8 @@ void ACircularGrid::SetLabyrinthEntrance(ELabyrinthStart ELabyrinthEntrance)
 void ACircularGrid::SetLabyrinthExit(ELabyrinthExit ELabyrinthExit)
 {
     FLabyrinthCell& EndCell = Cells[0];
-    
+
+    // set center cell visited
     switch (ELabyrinthExit)
     {
     case ELabyrinthExit::Center:
@@ -364,7 +368,8 @@ void ACircularGrid::SetLabyrinthExit(ELabyrinthExit ELabyrinthExit)
 int32 ACircularGrid::GetRandomPerimeterCell()
 {
     TArray<int32> PossibleIndex;
-    
+
+    // return a random perimeter cell
     for (FLabyrinthCell& Cell : Cells)
     {
         if (Cell.Ring == MaxRings - 1)
@@ -382,11 +387,13 @@ void ACircularGrid::RemoveWall(FLabyrinthCell Cell1, FLabyrinthCell Cell2)
     FHitResult HitResult;
     TArray<AActor*> ActorsToIgnore;
     
+    // Cast a line between two cell and remove the wall between
+    
     UKismetSystemLibrary::LineTraceSingle(
         GetWorld(),
         Cell1.Location + this->GetActorLocation(),
         Cell2.Location + this->GetActorLocation(),
-        UEngineTypes::ConvertToTraceType(ECC_Visibility),
+        UEngineTypes::ConvertToTraceType(ECC_Visibility), 
         false,
         ActorsToIgnore,
         EDrawDebugTrace::Persistent,
@@ -401,6 +408,8 @@ void ACircularGrid::OpenPerimeterCell(FLabyrinthCell Cell)
 {
     FHitResult HitResult;
     TArray<AActor*> ActorsToIgnore;
+
+    // remove wall of a perimeter cell
     
     UKismetSystemLibrary::LineTraceSingle(
         GetWorld(),
@@ -420,6 +429,8 @@ void ACircularGrid::OpenPerimeterCell(FLabyrinthCell Cell)
 void ACircularGrid::UpdatePathLocalisation(FLabyrinthCell Cell)
 {
     Path->ClearInstances();
+
+    // move debug cube to show the path when the algorithm run
     
     FTransform MakeTransform;
     MakeTransform.SetLocation(Cell.Location + this->GetActorLocation());
@@ -431,6 +442,7 @@ void ACircularGrid::UpdatePathLocalisation(FLabyrinthCell Cell)
 
 void ACircularGrid::StartRecursiveBacktracking()
 {
+    // funct to apply delay between recursive algo
     if (AnimationDelay <= 0)
     {
         AnimationDelay = 0.001;
@@ -440,6 +452,7 @@ void ACircularGrid::StartRecursiveBacktracking()
 
 void ACircularGrid::RecursiveBacktrackingStep()
 {
+    // Open labyrinth exit wall when algo finished
     if (RecursiveBacktrackingFinished)
     {
         GetWorld()->GetTimerManager().ClearTimer(TimerHandleBacktracking);
@@ -471,8 +484,10 @@ void ACircularGrid::RecursiveBacktrackingStep()
 void ACircularGrid::ProgressPath()
 {
     FLabyrinthCell ChosenNeighbor;
-    if (GetPotentialNextNeighbor(CurrentPathCell, ChosenNeighbor))
+    if (GetPotentialNextNeighbor(CurrentPathCell, ChosenNeighbor)) // Check potential current cell neighbors
     {
+        // Neighbors found & update current cell to progress path
+        
         NextPathCell = ChosenNeighbor;
         UpdatePathLocalisation(NextPathCell);
         RemoveWall(CurrentPathCell, NextPathCell);
@@ -480,6 +495,7 @@ void ACircularGrid::ProgressPath()
         UpdateCurrentVisitedState(NextPathCell.Index, true, true);
         PathStackCells.Add(Cells[CurrentPathCell.Index]);
 
+        // Update the longest path
         switch (EndPath)
         {
         case ELabyrinthExit::Center:
@@ -497,6 +513,7 @@ void ACircularGrid::ProgressPath()
     }
     else
     {
+        // No neighbors found start backtracking 
         UpdateCurrentVisitedState(CurrentPathCell.Index, false, true);
         UpdatePathLocalisation(CurrentPathCell);
         if (!PathStackCells.IsEmpty())
@@ -518,7 +535,8 @@ bool ACircularGrid::GetPotentialNextNeighbor(FLabyrinthCell Cell, FLabyrinthCell
 {
     TArray<FLabyrinthCell> PotentialNeighbors;
     TArray<int32> NeighborIndices;
-     
+
+    // Get all potential cell neighbors in a list and return a random cell of this list
     for (int32 Index : Cells[Cell.Index].Neighbors)
     {
         if (!Cells[Index].bVisited)
@@ -542,6 +560,7 @@ bool ACircularGrid::GetPotentialNextNeighbor(FLabyrinthCell Cell, FLabyrinthCell
 
 void ACircularGrid::UpdateCurrentVisitedState(int32 CellIndex, bool Current, bool Visited)
 {
+    // Update the specified cell his current & visited state
     FLabyrinthCell& UpdatedCell = Cells[CellIndex];
     UpdatedCell.bCurrent = Current;
     UpdatedCell.bVisited = Visited;
@@ -549,7 +568,7 @@ void ACircularGrid::UpdateCurrentVisitedState(int32 CellIndex, bool Current, boo
 
 void ACircularGrid::FoundLongestPathAtRing(int32 Ring)
 {
-    
+    //override the longest registered path by the new one
     if (PathStackCells.Num() - 1  > LongestPath && Ring == NextPathCell.Ring)
     {
         LongestPath = PathStackCells.Num() - 1;
@@ -562,6 +581,7 @@ void ACircularGrid::OpenCenterCell(FLabyrinthCell Cell)
     FHitResult HitResult;
     TArray<AActor*> ActorsToIgnore;
     
+    // remove wall between center cell and the given input cell
     UKismetSystemLibrary::LineTraceSingle(
         GetWorld(),
         Cell.Location + this->GetActorLocation(),
